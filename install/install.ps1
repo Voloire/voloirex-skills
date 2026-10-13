@@ -20,7 +20,7 @@ try {
     $dir = (Resolve-Path -LiteralPath $SourceDirectory).Path
   } else {
     $arch = Join-Path $tmp "repo.tar.gz"
-    $url = "https://codeload.github.com/$Repo/archive/refs/heads/$Ref.tar.gz"
+    $url = "https://codeload.github.com/$Repo/tar.gz/refs/heads/$Ref"
     Invoke-WebRequest -Uri $url -OutFile $arch
     tar -xzf $arch -C $tmp
     if ($LASTEXITCODE -ne 0) { throw "Archive extraction failed." }

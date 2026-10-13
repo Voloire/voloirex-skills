@@ -20,7 +20,7 @@ trap 'rm -rf "$tmp"' EXIT
 if [ -n "${VOLOIREX_SOURCE_DIR:-}" ]; then
   dir="$VOLOIREX_SOURCE_DIR"
 else
-  curl -fsSL "https://codeload.github.com/${REPO}/archive/refs/heads/${REF}.tar.gz" -o "$tmp/repo.tar.gz"
+  curl -fsSL "https://codeload.github.com/${REPO}/tar.gz/refs/heads/${REF}" -o "$tmp/repo.tar.gz"
   tar -xzf "$tmp/repo.tar.gz" -C "$tmp"
   dir="$tmp/voloirex-skills-$REF"
 fi

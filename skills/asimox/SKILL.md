@@ -11,6 +11,9 @@ Never request or display the key in chat.
 
 Run the bundled client:
 
+Resolve `scripts/voloirex.mjs` relative to the directory containing this SKILL.md,
+not relative to the user's project working directory.
+
 ```bash
 node scripts/voloirex.mjs review --file design.md --profile C
 ```

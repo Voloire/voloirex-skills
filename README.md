@@ -31,6 +31,14 @@ node ~/.voloirex/voloirex.mjs run asimoz
 node ~/.voloirex/voloirex.mjs resume asimoz <job-id>
 ```
 
+Windows PowerShell equivalent:
+
+```powershell
+node "$env:USERPROFILE\.voloirex\voloirex.mjs" run asimoz
+```
+
+Skill instructions resolve bundled scripts from the skill directory, not from the project cwd.
+
 The client reads the key from `VOLOIREX_API_KEY`, then `~/.voloirex/config.json`. Endpoint
 override: `VOLOIREX_ENDPOINT`.
 Every run prints a request ID before submission. Use `--request-id <same-id>` with identical

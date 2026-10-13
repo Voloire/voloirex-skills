@@ -5,6 +5,8 @@ description: Run the asimoZ Hello World marketplace demo when the user requests 
 
 # asimoZ
 
+Resolve script paths relative to the directory containing this SKILL.md, not the project.
+
 Run `node scripts/voloirex.mjs run asimoz` using Node.js 22+ and the saved key in
 `~/.voloirex/config.json`. The sole output is `Hello World, I'm asimoZ`.
 Each completed run consumes one credit from the shared account balance.

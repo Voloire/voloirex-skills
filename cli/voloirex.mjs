@@ -1,156 +1,83 @@
 #!/usr/bin/env node
-// Generic voloirex client. Drives any agent on the marketplace MCP endpoint.
-//   node voloirex.mjs review "<architecture>" --profile C [--file f.md] [--evidence name=path ...]
-//   node voloirex.mjs run <agent>
-// Key: VOLOIREX_API_KEY, ASIMOX_API_KEY, or ~/.voloirex/config.json (and ~/.asimox/config.json).
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { makeClient, waitForReport } from "./client.mjs";
 
 function readKey() {
-  for (const k of ["VOLOIREX_API_KEY", "ASIMOX_API_KEY"]) if (process.env[k]) return process.env[k];
-  for (const p of [join(homedir(), ".voloirex", "config.json"), join(homedir(), ".asimox", "config.json")]) {
+  const env = process.env.VOLOIREX_API_KEY || process.env.ASIMOX_API_KEY;
+  if (env) return env;
+  for (const dir of [".voloirex", ".asimox"]) {
     try {
-      const cfg = JSON.parse(readFileSync(p, "utf8"));
-      if (cfg.api_key) return cfg.api_key;
+      const value = JSON.parse(readFileSync(join(homedir(), dir, "config.json"), "utf8")).api_key;
+      if (value) return value;
     } catch {}
   }
-  return "";
-}
-
-function endpoint(agent = null) {
-  const base = (process.env.VOLOIREX_ENDPOINT || "https://mcp.voloirex.com/mcp").replace(/\/+$/, "");
-  return agent ? `${base}/${agent}` : base;
-}
-
-function makeClient(url, token) {
-  let seq = 0;
-  async function rpc(method, params, hasId = true) {
-    const payload = { jsonrpc: "2.0", method };
-    if (hasId) payload.id = ++seq;
-    if (params !== undefined) payload.params = params;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(payload),
-    });
-    const text = await res.text();
-    if (res.status === 202 || res.status === 204 || text === "") return { ok: true, notification: true };
-    let parsed;
-    try { parsed = JSON.parse(text); } catch { parsed = { raw: text }; }
-    if (!res.ok) return { ok: false, status: res.status, error: parsed?.error?.message || parsed?.raw || text };
-    return { ok: true, result: parsed.result, error: parsed.error };
-  }
-  function toolValue(result) {
-    if (result?.structuredContent && Object.keys(result.structuredContent).length) return result.structuredContent;
-    if (Array.isArray(result?.content)) {
-      for (const c of result.content) {
-        if (c.type === "text") { try { return JSON.parse(c.text); } catch { return { text: c.text }; } }
-      }
-    }
-    return result ?? {};
-  }
-  async function call(name, args) {
-    const r = await rpc("tools/call", { name, arguments: args });
-    if (!r.ok) throw new Error(`${name}: ${r.error}`);
-    if (r.notification) throw new Error(`${name}: unexpected empty response`);
-    const v = toolValue(r.result);
-    if (v?.error) throw new Error(`${name}: ${JSON.stringify(v.error)}`);
-    return v;
-  }
-  async function handshake() {
-    await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "voloirex-cli", version: "0.1.0" } });
-    await rpc("notifications/initialized", undefined, false);
-  }
-  return { call, handshake };
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-async function review(token, architecture, profile, evidence) {
-  const c = makeClient(endpoint("asimox"), token);
-  await c.handshake();
-  const started = await c.call("start_review", { architecture, profile, evidence });
-  const jobId = started.job_id;
-  console.error(`job ${jobId} started (reserved ${started.reserved_credits} credits)`);
-  for (;;) {
-    await sleep(4000);
-    const s = await c.call("review_status", { job_id: jobId });
-    if (s.status === "completed" || s.status === "incomplete" || s.status === "failed") break;
-  }
-  const report = await c.call("get_report", { job_id: jobId, format: "markdown" });
-  process.stdout.write(report.markdown || report.text || JSON.stringify(report, null, 2) + "\n");
-}
-
-async function runSimple(token, agent) {
-  const c = makeClient(endpoint(agent), token);
-  await c.handshake();
-  const started = await c.call("run", {});
-  const jobId = started.job_id;
-  console.error(`job ${jobId} started (reserved ${started.reserved_credits} credits)`);
-  for (;;) {
-    await sleep(2000);
-    const s = await c.call("status", { job_id: jobId });
-    if (s.status === "completed" || s.status === "failed") break;
-  }
-  const r = await c.call("report", { job_id: jobId });
-  process.stdout.write(r.text + "\n");
-}
-
-function parseEvidence(specs) {
-  const out = [];
-  for (const spec of specs) {
-    for (const part of spec.split(" ")) {
-      const [name, path] = part.split("=");
-      if (!name || !path) throw new Error(`invalid evidence "${part}": use name=path`);
-      out.push({ name, content: readFileSync(path, "utf8") });
-    }
-  }
-  return out;
+  throw new Error("No marketplace key found. Run the dashboard installer or set VOLOIREX_API_KEY.");
 }
 
 function usage() {
-  console.error(
-    "Usage:\n" +
-    "  node voloirex.mjs review \"architecture\" --profile L|C|D|A [--file f.md] [--evidence name=path ...]\n" +
-    "  node voloirex.mjs run <agent>",
-  );
+  console.log(`Usage:
+  node voloirex.mjs review "architecture" --profile C [--file design.md] [--evidence name=path]
+  node voloirex.mjs run <agent> [--request-id ID]
+  node voloirex.mjs resume <agent> <job-id> [--review]
+  All commands accept --timeout-seconds N. Reuse a request ID only with identical inputs.`);
 }
 
 async function main() {
-  const token = readKey();
-  if (!token) { console.error("No key found. Set VOLOIREX_API_KEY or run the installer with -Key <token>."); process.exit(2); }
-  const args = process.argv.slice(2);
-  const cmd = args[0];
-  const rest = args.slice(1);
-  if (!cmd || cmd === "help") { usage(); return; }
-
-  if (cmd === "review") {
-    let profile = "C", architecture = null, file = null;
-    const evidence = [];
-    for (let i = 0; i < rest.length; i++) {
-      const a = rest[i];
-      if (a === "--profile") profile = rest[++i];
-      else if (a === "--file") file = rest[++i];
-      else if (a === "--evidence") evidence.push(...parseEvidence([rest[++i]]));
-      else if (!architecture) architecture = a;
-      else evidence.push(...parseEvidence([a]));
-    }
-    if (!architecture && file) architecture = readFileSync(file, "utf8");
-    if (!architecture) { usage(); process.exit(2); }
-    await review(token, architecture, profile, evidence);
-    return;
+  const [command, ...args] = process.argv.slice(2);
+  if (!command || ["help", "--help", "-h"].includes(command)) return usage();
+  if (!["review", "run", "resume"].includes(command)) throw new Error("Unknown command; use --help.");
+  let agent = command === "review" ? "asimox" : args.shift();
+  let jobId = command === "resume" ? args.shift() : null;
+  let isReview = command === "review" || agent === "asimox";
+  let architecture, file, profile = "C", requestId = randomUUID(), timeoutSeconds = 2400;
+  const evidence = [];
+  for (let i = 0; i < args.length; i++) {
+    const option = args[i];
+    if (option === "--review") { isReview = true; continue; }
+    if (["--profile", "--file", "--request-id", "--timeout-seconds", "--evidence", "--agent"].includes(option)) {
+      const value = args[++i];
+      if (value === undefined || value.startsWith("--")) throw new Error(`Missing value for ${option}`);
+      if (option === "--profile") profile = value;
+      if (option === "--file") file = value;
+      if (option === "--agent") agent = value;
+      if (option === "--request-id") requestId = value;
+      if (option === "--timeout-seconds") timeoutSeconds = Number(value);
+      if (option === "--evidence") {
+        const separator = value.indexOf("=");
+        if (separator <= 0 || separator === value.length - 1) throw new Error("Evidence must use name=path.");
+        evidence.push({ name: value.slice(0, separator), content: readFileSync(value.slice(separator + 1), "utf8") });
+      }
+    } else if (command === "review" && !architecture && !option.startsWith("--")) architecture = option;
+    else throw new Error(`Unexpected argument: ${option}`);
   }
-
-  if (cmd === "run") {
-    const agent = rest[0];
-    if (!agent) { usage(); process.exit(2); }
-    await runSimple(token, agent);
-    return;
+  if (!/^[a-z][a-z0-9-]{1,30}$/.test(agent || "")) throw new Error("Invalid agent identifier.");
+  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0 || timeoutSeconds > 86400) throw new Error("Invalid timeout.");
+  if (!requestId || requestId.length > 128) throw new Error("Invalid request ID.");
+  if (command === "resume" && !/^[0-9a-f]{32}$/.test(jobId || "")) throw new Error("Invalid job ID.");
+  if (command === "review") {
+    if (file) architecture = readFileSync(file, "utf8");
+    if (!architecture?.trim() || !["L", "C", "D", "A"].includes(profile)) throw new Error("A review requires architecture text and profile L/C/D/A.");
   }
-
-  usage();
-  process.exit(2);
+  const base = new URL((process.env.VOLOIREX_ENDPOINT || "https://mcp.voloirex.com/mcp").replace(/\/+$/, "") + "/");
+  if (base.username || base.password || (base.protocol !== "https:" &&
+      !(base.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(base.hostname)))) {
+    throw new Error("The endpoint must use HTTPS, or localhost for development.");
+  }
+  const client = makeClient(new URL(agent, base).href, readKey());
+  await client.handshake();
+  if (command !== "resume") {
+    console.error(`request ID: ${requestId}; reuse --request-id ${requestId} with identical inputs on retries`);
+    const started = await client.call(isReview ? "start_review" : "run", {
+      ...(isReview ? { architecture, profile, evidence } : {}), request_id: requestId,
+    });
+    jobId = started.job_id;
+    console.error(`job ${jobId}; resume with: node voloirex.mjs resume ${agent} ${jobId}${isReview ? " --review" : ""}`);
+  }
+  const report = await waitForReport(client, jobId, { review: isReview, timeoutMs: timeoutSeconds * 1000 });
+  process.stdout.write((report.markdown || report.text || JSON.stringify(report, null, 2)) + "\n");
 }
 
-main().catch((e) => { console.error("voloirex error:", e.message); process.exit(1); });
+main().catch((error) => { console.error(`voloirex error: ${error.message}`); process.exitCode = 1; });

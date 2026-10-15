@@ -36,6 +36,19 @@ try {
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
   Copy-Item -Force -Path (Join-Path $dir "cli\voloirex.mjs") -Destination (Join-Path $dest "voloirex.mjs")
   Copy-Item -Force -Path (Join-Path $dir "cli\client.mjs") -Destination (Join-Path $dest "client.mjs")
+  $launcher = "@echo off`r`nnode `"%~dp0voloirex.mjs`" %*`r`nexit /b %errorlevel%`r`n"
+  [System.IO.File]::WriteAllText((Join-Path $dest "voloirex.cmd"), $launcher, (New-Object System.Text.UTF8Encoding($false)))
+  # Isolated installs must not change the real user's PATH.
+  if ([System.IO.Path]::GetFullPath($InstallHome).TrimEnd('\') -ieq [System.IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\')) {
+    $userPath = [string][Environment]::GetEnvironmentVariable("Path", "User")
+    if ($dest -notin ($userPath -split ';')) {
+      [Environment]::SetEnvironmentVariable("Path", ($userPath.TrimEnd(';') + ";" + $dest).TrimStart(';'), "User")
+    }
+    if ($dest -notin ($env:Path -split ';')) { $env:Path += ";$dest" }
+    Write-Host "Command ready: voloirex run asimoz (open a new terminal if needed)."
+  } else {
+    Write-Host "Launcher installed at $dest\voloirex.cmd; user PATH unchanged."
+  }
   foreach ($skill in @(Get-ChildItem -Directory (Join-Path $dir "skills"))) {
     foreach ($client in @(".claude", ".codex")) {
       $skillDest = Join-Path $InstallHome "$client\skills\$($skill.Name)"
@@ -51,7 +64,7 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $dest "config.json"), $json, (New-Object System.Text.UTF8Encoding($false)))
     Write-Host "voloirex CLI installed. Key saved to $dest\config.json"
   } else {
-    Write-Host "voloirex CLI installed. No key saved - re-run with -Key <token>."
+    Write-Host "voloirex CLI installed. No key written; existing config and environment keys remain available."
   }
 } finally {
   Remove-Item -Recurse -Force -Path $tmp -ErrorAction SilentlyContinue

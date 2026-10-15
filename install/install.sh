@@ -29,6 +29,12 @@ test -f "$dir/cli/voloirex.mjs"
 mkdir -p "$home/.voloirex"
 install -m 755 "$dir/cli/voloirex.mjs" "$home/.voloirex/voloirex.mjs"
 install -m 644 "$dir/cli/client.mjs" "$home/.voloirex/client.mjs"
+mkdir -p "$home/.local/bin"
+ln -sf "$home/.voloirex/voloirex.mjs" "$home/.local/bin/voloirex"
+case ":$PATH:" in
+  *":$home/.local/bin:"*) echo "Command ready: voloirex run asimoz" ;;
+  *) echo "Launcher installed. Add it to PATH: export PATH=\"$home/.local/bin:\$PATH\"" ;;
+esac
 for skill in "$dir"/skills/*; do
   test -f "$skill/SKILL.md"
   for client in .claude .codex; do
@@ -45,5 +51,5 @@ if [ -n "$KEY" ]; then
   chmod 600 "$home/.voloirex/config.json"
   echo "voloirex CLI installed. Key saved to $home/.voloirex/config.json"
 else
-  echo "voloirex CLI installed. No key saved - re-run with VOLOIREX_API_KEY=<token>."
+  echo "voloirex CLI installed. No key written; existing config remains available."
 fi

@@ -19,9 +19,9 @@ function readKey() {
 
 function usage() {
   console.log(`Usage:
-  node voloirex.mjs review "architecture" --profile C [--file design.md] [--evidence name=path]
-  node voloirex.mjs run <agent> [--request-id ID]
-  node voloirex.mjs resume <agent> <job-id> [--review]
+  voloirex review "architecture" --profile C [--file design.md] [--evidence name=path]
+  voloirex run <agent> [--request-id ID]
+  voloirex resume <agent> <job-id> [--review]
   All commands accept --timeout-seconds N. Reuse a request ID only with identical inputs.`);
 }
 
@@ -74,7 +74,7 @@ async function main() {
       ...(isReview ? { architecture, profile, evidence } : {}), request_id: requestId,
     });
     jobId = started.job_id;
-    console.error(`job ${jobId}; resume with: node voloirex.mjs resume ${agent} ${jobId}${isReview ? " --review" : ""}`);
+    console.error(`job ${jobId}; resume with: voloirex resume ${agent} ${jobId}${isReview ? " --review" : ""}`);
   }
   const report = await waitForReport(client, jobId, { review: isReview, timeoutMs: timeoutSeconds * 1000 });
   process.stdout.write((report.markdown || report.text || JSON.stringify(report, null, 2)) + "\n");

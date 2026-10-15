@@ -22,16 +22,21 @@ The installer places `voloirex.mjs` and `client.mjs` in `~/.voloirex/`, saves th
 `~/.voloirex/config.json`, and installs all three skills under both `~/.claude/skills/`
 and `~/.codex/skills/`. Node.js 22+ must be installed first (Windows:
 `winget install OpenJS.NodeJS.LTS`). Reinstalling without a key preserves the existing key.
+Windows installs a `voloirex.cmd` launcher and adds `~/.voloirex` to the user PATH; open a
+new terminal if needed. macOS/Linux install `~/.local/bin/voloirex`; if that directory is
+not already on PATH, the installer prints the export command to add to your shell profile.
+Isolated Windows installs with `-InstallHome` do not change the real user's PATH.
 
 ## Run
 
 ```bash
-node ~/.voloirex/voloirex.mjs review "architecture text" --profile C
-node ~/.voloirex/voloirex.mjs run asimoz
-node ~/.voloirex/voloirex.mjs resume asimoz <job-id>
+voloirex review "architecture text" --profile C
+voloirex run asimoz
+voloirex run asimoy
+voloirex resume asimoz <job-id>
 ```
 
-Windows PowerShell equivalent:
+The same commands work in Windows PowerShell. Direct Node invocation also remains available:
 
 ```powershell
 node "$env:USERPROFILE\.voloirex\voloirex.mjs" run asimoz
@@ -39,7 +44,8 @@ node "$env:USERPROFILE\.voloirex\voloirex.mjs" run asimoz
 
 Skill instructions resolve bundled scripts from the skill directory, not from the project cwd.
 
-The client reads the key from `VOLOIREX_API_KEY`, then `~/.voloirex/config.json`. Endpoint
+The client reads the key from `VOLOIREX_API_KEY`, then the legacy `ASIMOX_API_KEY`, then
+`~/.voloirex/config.json` (with `~/.asimox/config.json` as a legacy fallback). Endpoint
 override: `VOLOIREX_ENDPOINT`.
 Every run prints a request ID before submission. Use `--request-id <same-id>` with identical
 inputs after a lost response, or resume the job ID without another start. Waiting and

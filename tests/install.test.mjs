@@ -20,7 +20,7 @@ function install(home, token) {
 }
 
 test("offline installer installs client and all Claude/Codex skills, preserving key on reinstall", () => {
-  const home = mkdtempSync(join(process.env.VOLOIREX_TEST_ROOT || tmpdir(), "voloirex-install-test-"));
+  const home = mkdtempSync(join(process.env.VOLOIREX_TEST_ROOT || tmpdir(), "voloirex install test "));
   try {
     const first = install(home, key);
     assert.equal(first.status, 0, first.stderr || first.stdout);
@@ -36,6 +36,20 @@ test("offline installer installs client and all Claude/Codex skills, preserving 
     const second = install(home, "");
     assert.equal(second.status, 0, second.stderr || second.stdout);
     assert.equal(JSON.parse(readFileSync(join(home, ".voloirex/config.json"), "utf8")).api_key, key);
+    // Exercise the installed command, including a path containing spaces and exit status.
+    const launcher = process.platform === "win32"
+      ? join(home, ".voloirex/voloirex.cmd") : join(home, ".local/bin/voloirex");
+    function run(args) {
+      if (process.platform === "win32") return spawnSync("powershell.exe", ["-NoProfile", "-Command",
+        `& '${launcher.replaceAll("'", "''")}' ${args}; exit $LASTEXITCODE`], { encoding: "utf8" });
+      return spawnSync(launcher, [args], { encoding: "utf8" });
+    }
+    const help = run("--help");
+    assert.equal(help.status, 0, help.stderr || help.stdout);
+    assert.match(help.stdout, /voloirex run <agent>/);
+    const unknown = run("unknown-command");
+    assert.notEqual(unknown.status, 0);
+    assert.match(unknown.stderr, /Unknown command/);
     const invalid = install(home, "invalid-key");
     assert.notEqual(invalid.status, 0);
     assert.equal(JSON.parse(readFileSync(join(home, ".voloirex/config.json"), "utf8")).api_key, key);
